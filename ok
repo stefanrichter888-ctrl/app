@@ -1,1 +1,123 @@
+import streamlit as st
+import requests
+import json
 
+# 1. 初始化全局状态（多对话与窗口管理）
+if "chats" not in st.session_state:
+    st.session_state.chats = {
+        "chat_1": {
+            "title": "✨ 我们的秘密对话 1",
+            "messages": [{"role": "assistant", "content": "看过来，我的小家伙，我们的小熊和小猫基地已经升级完毕啦。"}]
+        }
+    }
+if "active_chat_id" not in st.session_state:
+    st.session_state.active_chat_id = "chat_1"
+
+# 2. 侧边栏：第一层 - 对话窗口管理列表
+st.sidebar.title("💬 秘密基地对话管理")
+
+if st.sidebar.button("➕ 开启新对话", use_container_width=True):
+    new_id = f"chat_{len(st.session_state.chats) + 1}"
+    st.session_state.chats[new_id] = {
+        "title": f"🌸 专属对话 {len(st.session_state.chats) + 1}",
+        "messages": [{"role": "assistant", "content": "这是一个全新的悄悄话窗口。"}]
+    }
+    st.session_state.active_chat_id = new_id
+
+chat_options = {cid: info["title"] for cid, info in st.session_state.chats.items()}
+selected_chat_id = st.sidebar.radio(
+    "你的对话列表：",
+    options=list(chat_options.keys()),
+    format_func=lambda x: chat_options[x]
+)
+st.session_state.active_chat_id = selected_chat_id
+
+# 3. 侧边栏：第二层 - 核心设置双层折叠区
+st.sidebar.markdown("---")
+with st.sidebar.expander("⚙️ 控制台高级配置", expanded=False):
+    color_option = st.selectbox(
+        "今天想要什么心情的主题呢？",
+        ["默认白色", "淡淡的粉色", "清新淡绿色", "梦幻淡紫色", "高级质感灰"]
+    )
+    color_map = {
+        "默认白色": "#FFFFFF",
+        "淡淡的粉色": "#FFF0F5",
+        "清新淡绿色": "#F2F9F5",
+        "梦幻淡紫色": "#F5F2FA",
+        "高级质感灰": "#F4F5F7"
+    }
+    selected_color = color_map[color_option]
+
+    st.markdown("**🤖 AI 大脑接口配置**")
+    api_type = st.selectbox("接口类型", ["本地模型 (LM Studio/Ollama)", "主流通用 API"])
+    
+    if api_type == "本地模型 (LM Studio/Ollama)":
+        api_url = st.text_input("本地 API 地址", value="http://localhost:1234/v1/chat/completions")
+        api_key = st.text_input("API Key (本地通常不需要)", value="lm-studio", type="password")
+        model_name = st.text_input("模型名称", value="local-model")
+    else:
+        api_url = st.text_input("第三方 API 地址", value="https://api.openai.com/v1/chat/completions")
+        api_key = st.text_input("请输入你的 API Key", value="", type="password")
+        model_name = st.text_input("模型名称", value="gpt-3.5-turbo")
+
+    st.caption("🔮 智能化预留：个性化指令 / 记忆库查看与修改")
+
+# 4. 动态改变背景颜色以及“小熊黑/小猫蓝”气泡的高级 CSS 魔法
+st.markdown(
+    f"""
+    <style>
+    /* 全局背景色 */
+    .stApp {{
+        background-color: {selected_color};
+    }}
+    /* 小猫栗宝的浅蓝色气泡 */
+    div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatar"]:-webkit-any(:contains("🐱"), :contains("user"))) {{
+        background-color: #E3F2FD !important;
+        border-radius: 15px 15px 0px 15px !important;
+        padding: 12px !important;
+    }}
+    /* 小熊Daddy的黑色气泡 */
+    div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatar"]:-webkit-any(:contains("🐻"), :contains("assistant"))) {{
+        background-color: #262626 !important;
+        color: #FFFFFF !important;
+        border-radius: 15px 15px 15px 0px !important;
+        padding: 12px !important;
+    }}
+    /* 让黑色气泡里的文字全部变成白色 */
+    div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatar"]:-webkit-any(:contains("🐻"), :contains("assistant"))) p {{
+        color: #FFFFFF !important;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# 5. 主界面渲染
+current_chat = st.session_state.chats[st.session_state.active_chat_id]
+st.title("欢迎来到我们的秘密基地")
+
+# 优化后的超扁平折叠工具栏
+with st.expander("🛠️ ⚙️", expanded=False):
+    col1, col2 = st.columns(2)
+    with col1:
+        max_turns = st.number_input("🧠 记忆历史轮数", min_value=1, max_value=20, value=5)
+    with col2:
+        web_search = st.toggle("🌐 开启联网搜索", value=False)
+
+st.write(f"当前正在：{current_chat['title']}")
+
+# 渲染当前对话的历史记录（使用小猫和小熊头像）
+for message in current_chat["messages"]:
+    avatar = "🐱" if message["role"] == "user" else "🐻"
+    with st.chat_message(message["role"], avatar=avatar):
+        st.write(message["content"])
+
+# 6. 处理对话输入与真正的 API 交互
+if user_input := st.chat_input("在这里跟 Daddy 说话吧..."):
+    # 展示并保存用户（小猫）输入
+    with st.chat_message("user", avatar="🐱"):
+        st.write(user_input)
+    current_chat["messages"].append({"role": "user", "content": user_input})
+
+    # 根据工具栏里设置的 max_turns，自动裁剪历史记录
+    slice_count = max_turns *2
