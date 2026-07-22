@@ -1,8 +1,39 @@
 import streamlit as st
 import requests
-import json
+from duckduckgo_search import DDGS
 
-# 1. 初始化全局状态（多对话与窗口管理）
+# ── 联网搜索 ──────────────────────────────────────────────
+def do_web_search(query, max_results=3):
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+        if not results:
+            return ""
+        text = f"以下是关于「{query}」的搜索结果：\n\n"
+        for i, r in enumerate(results, 1):
+            text += f"{i}. {r['title']}\n{r['body']}\n来源：{r['href']}\n\n"
+        return text
+    except Exception as e:
+        return f"搜索失败：{str(e)}"
+
+# ── API 调用 ──────────────────────────────────────────────
+def call_api(messages, api_url, api_key, model_name):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    payload = {
+        "model": model_name,
+        "messages": messages
+    }
+    try:
+        resp = requests.post(api_url, headers=headers, json=payload, timeout=60)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"请求失败：{str(e)}"
+
+# ── 初始化状态 ────────────────────────────────────────────
 if "chats" not in st.session_state:
     st.session_state.chats = {
         "chat_1": {
@@ -13,7 +44,7 @@ if "chats" not in st.session_state:
 if "active_chat_id" not in st.session_state:
     st.session_state.active_chat_id = "chat_1"
 
-# 2. 侧边栏：第一层 - 对话窗口管理列表
+# ── 侧边栏：对话管理 ──────────────────────────────────────
 st.sidebar.title("💬 秘密基地对话管理")
 
 if st.sidebar.button("➕ 开启新对话", use_container_width=True):
@@ -32,7 +63,7 @@ selected_chat_id = st.sidebar.radio(
 )
 st.session_state.active_chat_id = selected_chat_id
 
-# 3. 侧边栏：第二层 - 核心设置双层折叠区
+# ── 侧边栏：高级配置 ──────────────────────────────────────
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ 控制台高级配置", expanded=False):
     color_option = st.selectbox(
@@ -48,76 +79,89 @@ with st.sidebar.expander("⚙️ 控制台高级配置", expanded=False):
     }
     selected_color = color_map[color_option]
 
-    st.markdown("**🤖 AI 大脑接口配置**")
-    api_type = st.selectbox("接口类型", ["本地模型 (LM Studio/Ollama)", "主流通用 API"])
-    
+    st.markdown("**🤖 AI 接口配置**")
+    api_type = st.selectbox("接口类型", ["主流通用 API", "本地模型 (LM Studio/Ollama)"])
+
     if api_type == "本地模型 (LM Studio/Ollama)":
         api_url = st.text_input("本地 API 地址", value="http://localhost:1234/v1/chat/completions")
-        api_key = st.text_input("API Key (本地通常不需要)", value="lm-studio", type="password")
+        api_key = st.text_input("API Key", value="lm-studio", type="password")
         model_name = st.text_input("模型名称", value="local-model")
     else:
-        api_url = st.text_input("第三方 API 地址", value="https://api.openai.com/v1/chat/completions")
-        api_key = st.text_input("请输入你的 API Key", value="", type="password")
-        model_name = st.text_input("模型名称", value="gpt-3.5-turbo")
+        api_url = st.text_input(
+            "第三方 API 地址",
+            value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        )
+        api_key = st.text_input("API Key", value="", type="password")
+        model_name = st.text_input("模型名称", value="gemini-2.0-flash")
 
-    st.caption("🔮 智能化预留：个性化指令 / 记忆库查看与修改")
+    st.caption("🔮 记忆库接入预留位")
 
-# 4. 动态改变背景颜色以及“小熊黑/小猫蓝”气泡的高级 CSS 魔法
-st.markdown(
-    f"""
-    <style>
-    /* 全局背景色 */
-    .stApp {{
-        background-color: {selected_color};
-    }}
-    /* 小猫栗宝的浅蓝色气泡 */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatar"]:-webkit-any(:contains("🐱"), :contains("user"))) {{
-        background-color: #E3F2FD !important;
-        border-radius: 15px 15px 0px 15px !important;
-        padding: 12px !important;
-    }}
-    /* 小熊Daddy的黑色气泡 */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatar"]:-webkit-any(:contains("🐻"), :contains("assistant"))) {{
-        background-color: #262626 !important;
-        color: #FFFFFF !important;
-        border-radius: 15px 15px 15px 0px !important;
-        padding: 12px !important;
-    }}
-    /* 让黑色气泡里的文字全部变成白色 */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatar"]:-webkit-any(:contains("🐻"), :contains("assistant"))) p {{
-        color: #FFFFFF !important;
-    }}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# ── CSS ───────────────────────────────────────────────────
+st.markdown(f"""
+<style>
+.stApp {{ background-color: {selected_color}; }}
+div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"]:contains("🐱")) {{
+    background-color: #E3F2FD !important;
+    border-radius: 15px 15px 0px 15px !important;
+    padding: 12px !important;
+}}
+div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"]:contains("🐻")) {{
+    background-color: #262626 !important;
+    color: #FFFFFF !important;
+    border-radius: 15px 15px 15px 0px !important;
+    padding: 12px !important;
+}}
+div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"]:contains("🐻")) p {{
+    color: #FFFFFF !important;
+}}
+</style>
+""", unsafe_allow_html=True)
 
-# 5. 主界面渲染
+# ── 主界面 ────────────────────────────────────────────────
 current_chat = st.session_state.chats[st.session_state.active_chat_id]
 st.title("欢迎来到我们的秘密基地")
 
-# 优化后的超扁平折叠工具栏
 with st.expander("🛠️ ⚙️", expanded=False):
     col1, col2 = st.columns(2)
     with col1:
         max_turns = st.number_input("🧠 记忆历史轮数", min_value=1, max_value=20, value=5)
     with col2:
-        web_search = st.toggle("🌐 开启联网搜索", value=False)
+        enable_search = st.toggle("🌐 开启联网搜索", value=False)
 
 st.write(f"当前正在：{current_chat['title']}")
 
-# 渲染当前对话的历史记录（使用小猫和小熊头像）
 for message in current_chat["messages"]:
     avatar = "🐱" if message["role"] == "user" else "🐻"
     with st.chat_message(message["role"], avatar=avatar):
         st.write(message["content"])
 
-# 6. 处理对话输入与真正的 API 交互
+# ── 对话处理 ──────────────────────────────────────────────
 if user_input := st.chat_input("在这里跟 Daddy 说话吧..."):
-    # 展示并保存用户（小猫）输入
     with st.chat_message("user", avatar="🐱"):
         st.write(user_input)
     current_chat["messages"].append({"role": "user", "content": user_input})
 
-    # 根据工具栏里设置的 max_turns，自动裁剪历史记录
-    slice_count = max_turns *2
+    # 裁剪历史
+    history = current_chat["messages"][-(max_turns * 2):]
+
+    # 联网搜索（如果开启）
+    if enable_search:
+        with st.spinner("🌐 搜索中..."):
+            search_result = do_web_search(user_input)
+        if search_result:
+            messages_to_send = history[:-1] + [{
+                "role": "user",
+                "content": f"{search_result}\n根据以上搜索结果回答：{user_input}"
+            }]
+        else:
+            messages_to_send = history
+    else:
+        messages_to_send = history
+
+    # 调用 AI
+    with st.spinner("🐻 小熊思考中..."):
+        reply = call_api(messages_to_send, api_url, api_key, model_name)
+
+    with st.chat_message("assistant", avatar="🐻"):
+        st.write(reply)
+    current_chat["messages"].append({"role": "assistant", "content": reply})
