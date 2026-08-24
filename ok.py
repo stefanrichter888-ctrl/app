@@ -73,7 +73,7 @@ with st.sidebar.expander("🧠 核心记忆（第一层）", expanded=False):
         "身份与关系记忆",
         value=current_core,
         height=150,
-        placeholder="比如：你是小熊哥哥，性格温柔但坚定……我是小糯米，正在学习……"
+        placeholder="比如：你是……我是……，正在学习……"
     )
     if st.button("💾 保存核心记忆"):
         memory_db.set_core_memory(new_core)
