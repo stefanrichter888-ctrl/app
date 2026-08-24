@@ -1,0 +1,19 @@
+{
+  "core_memory": {
+    "growth_slowdown_after_chars": 1500,
+    "hard_stop_chars": 3000
+  },
+  "warm_memory": {
+    "max_items": 20,
+    "decay_days": 10
+  },
+  "archive_memory": {
+    "min_temperature": 0.1,
+    "decay_rate_per_day": 0.02,
+    "start_temperature": 1.0
+  },
+  "retrieval": {
+    "candidate_pool_size": 15,
+    "final_injection_count": 5
+  }
+}
