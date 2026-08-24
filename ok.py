@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from duckduckgo_search import DDGS
+import memory_db
 
 # ── 联网搜索 ──────────────────────────────────────────────
 def do_web_search(query, max_results=3):
@@ -63,6 +64,22 @@ selected_chat_id = st.sidebar.radio(
 )
 st.session_state.active_chat_id = selected_chat_id
 
+# ── 侧边栏：核心记忆（第一层）──────────────────────────────
+st.sidebar.markdown("---")
+with st.sidebar.expander("🧠 核心记忆（第一层）", expanded=False):
+    st.caption("关于「你是谁、我是谁」的长期背景，每次对话都会自动带上")
+    current_core = memory_db.get_core_memory()
+    new_core = st.text_area(
+        "身份与关系记忆",
+        value=current_core,
+        height=150,
+        placeholder="比如：你是小熊哥哥，性格温柔但坚定……我是小糯米，正在学习……"
+    )
+    if st.button("💾 保存核心记忆"):
+        memory_db.set_core_memory(new_core)
+        st.success("已保存！")
+        st.rerun()
+
 # ── 侧边栏：高级配置 ──────────────────────────────────────
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ 控制台高级配置", expanded=False):
@@ -93,8 +110,6 @@ with st.sidebar.expander("⚙️ 控制台高级配置", expanded=False):
         )
         api_key = st.text_input("API Key", value="", type="password")
         model_name = st.text_input("模型名称", value="gemini-2.0-flash")
-
-    st.caption("🔮 记忆库接入预留位")
 
 # ── CSS ───────────────────────────────────────────────────
 st.markdown(f"""
@@ -158,6 +173,12 @@ if user_input := st.chat_input("在这里跟 Daddy 说话吧..."):
     else:
         messages_to_send = history
 
+    # 注入第一层核心记忆（永远放在最前面）
+    core_content = memory_db.get_core_memory()
+    if core_content:
+        system_message = {"role": "system", "content": core_content}
+        messages_to_send = [system_message] + messages_to_send
+
     # 调用 AI
     with st.spinner("🐻 小熊思考中..."):
         reply = call_api(messages_to_send, api_url, api_key, model_name)
@@ -165,3 +186,4 @@ if user_input := st.chat_input("在这里跟 Daddy 说话吧..."):
     with st.chat_message("assistant", avatar="🐻"):
         st.write(reply)
     current_chat["messages"].append({"role": "assistant", "content": reply})
+            
